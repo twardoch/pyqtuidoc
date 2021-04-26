@@ -3,11 +3,105 @@
 """
 """
 
+import sys
 import pyqtuidoc
 from argparse import ArgumentParser
 import logging
+from . import compileUi, loadUi
 
 PROG = 'qtuidocmake'
+
+class Driver(object):
+    """ This encapsulates access to the pyuic functionality so that it can be
+    called by code that is Python v2/v3 specific.
+    """
+
+    LOGGER_NAME = 'PyQt5.uic'
+
+    def __init__(self, opts, ui_file):
+        """ Initialise the object.  opts is the parsed options.  ui_file is the
+        name of the .ui file.
+        """
+
+        if opts.debug:
+            logger = logging.getLogger(self.LOGGER_NAME)
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
+
+        self._opts = opts
+        self._ui_file = ui_file
+
+    def invoke(self):
+        """ Generate the Python code. """
+
+        needs_close = False
+
+        if sys.hexversion >= 0x03000000:
+            if self._opts.output == '-':
+                from io import TextIOWrapper
+
+                pyfile = TextIOWrapper(sys.stdout.buffer, encoding='utf8')
+            else:
+                pyfile = open(self._opts.output, 'wt', encoding='utf8')
+                needs_close = True
+        else:
+            if self._opts.output == '-':
+                pyfile = sys.stdout
+            else:
+                pyfile = open(self._opts.output, 'wt')
+                needs_close = True
+
+        import_from = self._opts.import_from
+
+        if import_from:
+            from_imports = True
+        elif self._opts.from_imports:
+            from_imports = True
+            import_from = '.'
+        else:
+            from_imports = False
+
+        compileUi(self._ui_file, pyfile, self._opts.execute, self._opts.indent,
+                  from_imports, self._opts.resource_suffix, import_from)
+
+        if needs_close:
+            pyfile.close()
+        return 0
+
+    def on_IOError(self, e):
+        """ Handle an IOError exception. """
+
+        sys.stderr.write("Error: %s: \"%s\"\n" % (e.strerror, e.filename))
+
+    def on_SyntaxError(self, e):
+        """ Handle a SyntaxError exception. """
+
+        sys.stderr.write("Error in input file: %s\n" % e)
+
+    def on_NoSuchClassError(self, e):
+        """ Handle a NoSuchClassError exception. """
+
+        sys.stderr.write(str(e) + "\n")
+
+    def on_NoSuchWidgetError(self, e):
+        """ Handle a NoSuchWidgetError exception. """
+
+        sys.stderr.write(str(e) + "\n")
+
+    def on_Exception(self, e):
+        """ Handle a generic exception. """
+
+        if logging.getLogger(self.LOGGER_NAME).level == logging.DEBUG:
+            import traceback
+
+            traceback.print_exception(*sys.exc_info())
+        else:
+            from PyQt5 import QtCore
+
+            sys.stderr.write("An unexpected error occurred. PyQt (%s)" % QtCore.PYQT_VERSION_STR)
+
 
 def cli():
     parser = ArgumentParser(
@@ -20,82 +114,74 @@ def cli():
         help='path to video file'
     )
     group.add_argument(
-        "-d",
-        "--dir",
-        dest='dir',
-        action='store_true',
-        help='path is a folder with video files'
+        "-p", "--preview",
+        dest="preview",
+        action="store_true",
+        default=False,
+        help="show a preview of the UI instead of generating code"
     )
     group.add_argument(
-        "-o",
-        "--outdir",
-        dest='outdir',
-        metavar="output_folder",
-        help = 'output folder for created folders'
+        "-o", "--output",
+        dest="output",
+        default="-",
+        metavar="FILE",
+        help="write generated code to FILE instead of stdout"
     )
-    group = parser.add_argument_group('make images')
     group.add_argument(
-        "-i",
-        "--image-every",
-        dest='isumfreq',
-        metavar="secs",
-        default=pyhecate.ISUMFREQ,
+        "-x", "--execute",
+        dest="execute",
+        action="store_true",
+        default=False,
+        help="generate extra code to test and display the class"
+    )
+    group.add_argument(
+        "-d", "--debug",
+        dest="debug",
+        action="store_true",
+        default=False,
+        help="show debug output"
+    )
+    group.add_argument(
+        "-i", "--indent",
+        dest="indent",
+        action="store",
         type=int,
-        help = 'JPG snapshot frequency in seconds (default: %(default)s)'
+        default=4,
+        metavar="N",
+        help="set indent width to N spaces, tab if N is 0 [default: 4]"
     )
-    group.add_argument(
-        "-g",
-        "--gif-width",
-        dest='gifwidth',
-        metavar="px",
-        default=pyhecate.GIFWIDTH,
-        type=int,
-        help='GIF width (default: %(default)s)'
-    )
-    group.add_argument(
-        "-I",
-        "--skip-images",
-        dest='isum',
-        action='store_false',
-        help='skip making JPG & GIF images'
-    )
-    group = parser.add_argument_group('make video summary')
-    group.add_argument(
-        "-s",
-        "--video-length",
-        dest='vsumlength',
-        metavar="secs",
-        default=pyhecate.VSUMLENGTH,
-        type=int,
-        help='video summary length in seconds (default: %(default)s)'
-    )
-    group.add_argument(
-        "-a",
-        "--outro",
-        dest='outro',
-        metavar="path_to_outro_video",
-        help = 'append outro video to summary video'
-    )
-    group.add_argument(
-        "-S",
-        "--skip-video-summary",
-        dest='vsum',
-        action='store_false',
-        help='skip making the video summary MP4 file'
-    )
+
     group = parser.add_argument_group('other')
     group.add_argument(
-        '-v',
-        '--verbose',
+        "--import-from",
+        dest="import_from",
+        metavar="PACKAGE",
+        help="generate imports of pyrcc5 generated modules in the style 'from PACKAGE import ...'"
+    )
+    group.add_argument(
+        "--from-imports",
+        dest="from_imports",
+        action="store_true",
+        default=False, help="the equivalent of '--import-from=.'"
+    )
+    group.add_argument(
+        "--resource-suffix",
+        dest="resource_suffix",
+        action="store",
+        default="_rc",
+        metavar="SUFFIX",
+        help="append SUFFIX to the basename of resource files [default: _rc]"
+    )
+    group.add_argument(
+        '-v', '--verbose',
         action='count',
         default=1,
         help='-v show progress, -vv show debug'
     )
     group.add_argument(
-        '-V',
-        '--version',
+        '-V', '--version',
         action='version',
-        version='%s %s' % (PROG, pyhecate.__version__),
+        version='%s %s' % (PROG, pyqtuidoc.__version__),
         help='show version and exit'
     )
 
@@ -108,10 +194,32 @@ def main(*args, **kwargs):
     opts.verbose = 40 - (10 * opts.verbose) if opts.verbose > 0 else 0
     logging.basicConfig(level=opts.verbose, format='%(asctime)s %(levelname)s: %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
-    opts = vars(opts)
+    #opts = vars(opts)
     logging.debug('Running with options:\n%s' % repr(opts))
-    del opts['verbose']
-    #pyh = pyhecate.PyHecate(**opts)
+    #del opts['verbose']
+    driver = Driver(opts, opts.path)
+
+    exit_status = 1
+
+    try:
+        exit_status = driver.invoke()
+
+    except IOError as e:
+        driver.on_IOError(e)
+
+    except SyntaxError as e:
+        driver.on_SyntaxError(e)
+
+    except NoSuchClassError as e:
+        driver.on_NoSuchClassError(e)
+
+    except NoSuchWidgetError as e:
+        driver.on_NoSuchWidgetError(e)
+
+    except Exception as e:
+        driver.on_Exception(e)
+
+    sys.exit(exit_status)
 
 if __name__ == '__main__':
     main()
