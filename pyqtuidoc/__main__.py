@@ -3,6 +3,7 @@
 """
 """
 
+import os
 import sys
 from argparse import ArgumentParser
 import logging
@@ -25,7 +26,12 @@ from PyQt5.QtWidgets import QWidget as YAngle, QWidget as YBalance, QWidget as Y
     QWidget as BlendPreviewWidget, QWidget as CellChart, QWidget as GalleryListWidget, QWidget as AboutContent, \
     QWidget as FontCellChart, QWidget as FontPreviewWidget, QDialog as DlgCreateMissingGlyphs
 
-from pyqtuidoc import ylineeditarrowdown, yselector, ytitlelabel, ytrackingframe
+sys.path.append(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        'fakemods'
+    )
+)
 
 PROG = 'qtuidocmake'
 
