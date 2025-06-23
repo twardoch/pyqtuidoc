@@ -248,8 +248,11 @@ def main() -> None:
         except FileNotFoundError:
             logging.error(f"UI file not found: {parsed_args.path}")
             sys.exit(1)
-        except (OSError, RuntimeError) as e:  # Catch more specific exceptions
-            logging.error(f"An error occurred during UI processing: {e!s}")
+        except OSError as e:
+            logging.error(f"OSError during UI processing ({type(e).__name__}): {e!s}")
+            sys.exit(1)
+        except RuntimeError as e:
+            logging.error(f"RuntimeError during UI processing ({type(e).__name__}): {e!s}")
             sys.exit(1)
     else:
         parser.print_help()
