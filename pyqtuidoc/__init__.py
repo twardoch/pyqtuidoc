@@ -45,6 +45,4 @@ Copyright (c) 2021 Adam Twardoch <adam+github@twardoch.com>
 MIT license. Python 3.8+
 """
 
-# Version will be dynamically managed by hatch-vcs.
-# For runtime access, use `importlib.metadata.version("pyqtuidoc")`.
-# __version__ = "0.1.0"  # Removed
+__version__ = "0.1.0"

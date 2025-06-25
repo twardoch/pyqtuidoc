@@ -1,30 +1,25 @@
 #!/usr/bin/env python
-"""
-Command-line interface for pyqtuidoc.
-"""
+""" """
 
-import argparse
-import importlib.metadata
 import logging
+import os
 import sys
+from argparse import ArgumentParser
+from collections import OrderedDict
 
 from PyQt5 import QtWidgets, uic
 
-# The fakemods import was handled by sys.path manipulation.
-# This should be resolved with proper packaging if fakemods are necessary.
-# For now, assuming they might be part of a test setup or older structure.
-# The original `sys.path.append` is removed.
+import pyqtuidoc
+
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fakemods"))
 
 PROG = "qtuidocmake"
 
 
-def cli() -> argparse.ArgumentParser:
-    """
-    Configures and returns the argument parser for the CLI.
-    """
-    parser = argparse.ArgumentParser(prog=f"{PROG}")
+def cli():
+    parser = ArgumentParser(prog="%s" % PROG)
     group = parser.add_argument_group("paths and folders")
-    group.add_argument("path", metavar="path", help="path to .ui file")
+    group.add_argument("path", metavar="path", help="path to video file")
     group.add_argument(
         "-p",
         "--preview",
@@ -73,10 +68,7 @@ def cli() -> argparse.ArgumentParser:
         "--import-from",
         dest="import_from",
         metavar="PACKAGE",
-        help=(
-            "generate imports of pyrcc5 generated modules in the style "
-            "'from PACKAGE import ...'"
-        ),
+        help="generate imports of pyrcc5 generated modules in the style 'from PACKAGE import ...'",
     )
     group.add_argument(
         "--from-imports",
@@ -104,159 +96,72 @@ def cli() -> argparse.ArgumentParser:
         "-V",
         "--version",
         action="version",
-        version=f"{PROG} {importlib.metadata.version('pyqtuidoc')}",
+        version=f"{PROG} {pyqtuidoc.__version__}",
         help="show version and exit",
     )
 
     return parser
 
 
-# def dump_q_object(qobject: Any) -> Optional[OrderedDict[Any, Any]]:
-# Renamed and type hinted
-#     """Dumps QObject properties. Currently unused."""
-#     # rep = OrderedDict() # Unused variable
-#     # if 'toolTip' in ...: # Original code was incomplete
-#     return None # Placeholder, as original was incomplete and unused
+def dumpQObject(qobject):
+    OrderedDict()
+    # if 'toolTip' in
 
 
-# def dump_q_object_tree( # Renamed and type hinted
-#     qobject: Any, level: int = 0
-# ) -> None:
-#     """
-#     A helper function for printing the tree view of QObjects.
-#     Qt offers a similar function, but it is only available if Qt was a debug build.
-#     Args:
-#         qobject: The object to dump the tree.
-#         level: The indent level.
-#     """
-#     # This function seems to be for debugging and uses print extensively.
-#     # It's not directly used by the core logic. Commenting out for now.
-#     # We can re-introduce it with proper logging if needed.
-#
-#     # if level == 0:
-#     #     logging.debug(
-#     #         f"+ {qobject.objectName()} ({type(qobject)})"  # type: ignore
-#     #      )
-#
-#     # children = qobject.children() # type: ignore
-#     # for i, child in enumerate(children):
-#     #     if i == 0:
-#     #         logging.debug(f"{'|  ' * (level + 1)}")
-#     #         prefix = f"{'|  ' * level}+--"
-#     #     else:
-#     #         logging.debug(f"{'|  ' * (level + 2)}")
-#     #         prefix = f"{'|  ' * (level + 1)}"
-#
-#     #     # Assuming dump_q_object would return a string representation
-#     #     obj_details = dump_q_object(qobject)
-#     #     logging.debug(
-#     #         f"{prefix}+ {child.objectName()} ({obj_details})"  # type: ignore
-#     #     )
-#     #     dump_q_object_tree(child, level + 1)
+def dumpQObjectTree(qobject, level=0):
+    """
+    A helper function for printing the tree view of QObjects. Qt offers a similar function, but
+    it is only available if Qt was a debug build.
+    Args:
+        qobject[QObject]: The object to dump the tree.
+        level[int]: The indent level.
+    """
+
+    if level == 0:
+        print("+ " + qobject.objectName() + " (" + str(type(qobject)) + ")")
+
+    children = qobject.children()
+    n = len(children)
+    for i in range(n):
+        child = children[i]
+
+        if i == 0:
+            print("|  " * (level + 1))
+            prefix = "|  " * (level) + "+--"
+        else:
+            print("|  " * (level + 2))
+            prefix = "|  " * (level + 1)
+
+        print(prefix + "+ " + child.objectName() + " (" + dumpQObject(qobject) + ")")
+        dumpQObjectTree(child, level + 1)
 
 
-# class AppWindow(QtWidgets.QMainWindow):
-#     def __init__(self, uipath: str) -> None:
-#         super().__init__()
-#         self.ui = uic.loadUi(uipath, self)  # type: ignore[attr-defined]
-#         # self.show()
+class AppWindow(QtWidgets.QMainWindow):
+    def __init__(self, uipath):
+        super().__init__()
+        self.ui = uic.loadUi(uipath, self)
+        # self.show()
 
 
-def setup_logging(verbosity: int, debug_mode: bool) -> None:
-    """Configures logging based on verbosity and debug mode."""
-    log_level = logging.WARNING  # Default
-    if debug_mode:  # Explicit debug flag takes precedence
-        log_level = logging.DEBUG
-    elif verbosity == 0:  # No -v flags
-        log_level = logging.ERROR
-    elif verbosity == 1:  # -v
-        log_level = logging.WARNING
-    elif verbosity == 2:  # -vv
-        log_level = logging.INFO
-    elif verbosity >= 3:  # -vvv or more
-        log_level = logging.DEBUG
-
+def main(*args, **kwargs):
+    parser = cli(*args, **kwargs)
+    opts = parser.parse_args()
+    opts.verbose = 40 - (10 * opts.verbose) if opts.verbose > 0 else 0
     logging.basicConfig(
-        level=log_level,
+        level=opts.verbose,
         format="%(asctime)s %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    opts = vars(opts)
+    logging.debug("Running with options:\n%s" % repr(opts))
+    del opts["verbose"]
 
-
-def main() -> None:
-    """
-    Main entry point for the qtuidocmake CLI.
-    """
-    parser = cli()
-    parsed_args = parser.parse_args()  # type: argparse.Namespace
-
-    setup_logging(parsed_args.verbose, parsed_args.debug)
-
-    logging.debug(f"Running with options: {parsed_args!r}")
-
-    if parsed_args.preview:
-        if hasattr(parsed_args, "path") and parsed_args.path:
-            _app = QtWidgets.QApplication(sys.argv)
-
-            class PreviewAppWindow(QtWidgets.QMainWindow):
-                def __init__(self, uipath_str: str) -> None:
-                    super().__init__()
-                    uic.loadUi(uipath_str, self)
-                    self.show()
-
-            _window = PreviewAppWindow(parsed_args.path)  # noqa: F841 (unused variable)
-            sys.exit(_app.exec_())
-        else:
-            logging.error("No UI file path provided for preview.")
-            parser.print_help()
-            sys.exit(1)
-    elif hasattr(parsed_args, "path") and parsed_args.path:
-        logging.info(f"Processing UI file: {parsed_args.path}")
-        try:
-            # Placeholder for actual uic.compileUi or other processing logic
-            # from PyQt5.uic import compileUi
-            # Example:
-            # with open(
-            #    parsed_args.output if parsed_args.output != "-" else sys.stdout, "w"
-            # ) as f:
-            #     compileUi(
-            #         parsed_args.path,
-            #         f,
-            #         execute=parsed_args.execute,
-            #         indent=parsed_args.indent,
-            #         import_from=parsed_args.import_from,
-            #         from_imports=parsed_args.from_imports,
-            #         resource_suffix=parsed_args.resource_suffix
-            #     )
-
-            output_content = (
-                f"# TODO: Implement .ui processing for {parsed_args.path}\n"
-                f"# Options: {parsed_args!r}\n"
-            )
-            if parsed_args.output == "-":
-                sys.stdout.write(output_content)
-            else:
-                with open(
-                    parsed_args.output, "w", encoding="utf-8"
-                ) as output_file:
-                    output_file.write(output_content)
-                logging.info(
-                    f"Placeholder output written to {parsed_args.output}"
-                )
-            logging.info("UI processing logic needs to be implemented.")
-
-        except FileNotFoundError:
-            logging.error(f"UI file not found: {parsed_args.path}")
-            sys.exit(1)
-        except OSError as e:
-            logging.error(f"OSError during UI processing ({type(e).__name__}): {e!s}")
-            sys.exit(1)
-        except RuntimeError as e:
-            logging.error(f"RuntimeError during UI processing ({type(e).__name__}): {e!s}")
-            sys.exit(1)
-    else:
-        parser.print_help()
-        sys.exit(1)
+    QtWidgets.QApplication(sys.argv)
+    w = AppWindow(opts["path"])
+    print(dir(w))
+    help(w)
+    # dumpQObjectTree(w)
+    # sys.exit(app.exec_())
 
 
 if __name__ == "__main__":
